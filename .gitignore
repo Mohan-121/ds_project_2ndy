@@ -1,0 +1,35 @@
+# Environments
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Database / SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment variables
+.env
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# Testing
+.pytest_cache/
+coverage/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

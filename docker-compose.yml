@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: urbaniq-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: urbaniq
+      POSTGRES_PASSWORD: urbaniq_secure_pass
+      POSTGRES_DB: urbaniq_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - urbaniq-net
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: urbaniq-mosquitto
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquittodata:/mosquitto/data
+      - mosquittolog:/mosquitto/log
+    networks:
+      - urbaniq-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: urbaniq-backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql+psycopg2://urbaniq:urbaniq_secure_pass@postgres:5432/urbaniq_db
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: 1883
+      SECRET_KEY: urbaniq-production-secret-key-replace-in-env
+      CITY_NAME: Coimbatore
+      CITY_LAT: 11.0168
+      CITY_LON: 76.9558
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - mosquitto
+    volumes:
+      - ./data:/app/data
+    networks:
+      - urbaniq-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: urbaniq-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - urbaniq-net
+
+networks:
+  urbaniq-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  mosquittodata:
+  mosquittolog:
