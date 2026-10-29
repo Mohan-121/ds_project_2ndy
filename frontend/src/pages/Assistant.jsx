@@ -132,7 +132,7 @@ export default function AssistantPage() {
     staleTime: 60_000,
   })
 
-  const geminiStatus = statusData?.data || {}
+  const aiStatus = statusData?.data || {}
 
   async function submitQuery() {
     const q = query.trim()
@@ -168,24 +168,24 @@ export default function AssistantPage() {
           </p>
         </div>
 
-        {/* Gemini API Status Badge */}
+        {/* AI Engine Status Badge */}
         <div className="shrink-0 flex items-center gap-2">
-          {geminiStatus.status === 'CONNECTED' ? (
+          {aiStatus.status === 'CONNECTED' ? (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="font-semibold">Gemini LLM Active</span>
-              <span className="text-[10px] text-emerald-600 font-mono">3.8-Flash</span>
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+              <span className="font-semibold">{aiStatus.provider?.includes('Groq') ? 'Groq LPU Active' : 'Gemini Active'}</span>
+              <span className="text-[10px] text-emerald-700 font-mono bg-emerald-100/60 px-1 py-0.5 rounded">{aiStatus.model || 'qwen-27b'}</span>
             </div>
-          ) : geminiStatus.status === 'PERMISSION_DENIED' ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs" title={geminiStatus.error_detail}>
+          ) : aiStatus.status === 'PERMISSION_DENIED' ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs" title={aiStatus.error_detail}>
               <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-              <span className="font-semibold">Gemini Key: Billing Required</span>
-              <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded">Local Grounded Facts Engine Active</span>
+              <span className="font-semibold">AI Key: Billing Required</span>
+              <span className="text-[10px] bg-amber-100 text-amber-700 px-1 rounded">Local Grounded Facts Active</span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface border border-border-hairline text-ink-secondary text-xs">
               <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-              <span>Offline Fact Engine Active</span>
+              <span>Grounded Fact Engine Active</span>
             </div>
           )}
         </div>

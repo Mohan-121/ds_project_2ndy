@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     MQTT_KEEPALIVE: int = 60
 
     # External APIs
+    GROQ_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     MAPBOX_ACCESS_TOKEN: Optional[str] = None
     CESIUM_ION_ACCESS_TOKEN: Optional[str] = None

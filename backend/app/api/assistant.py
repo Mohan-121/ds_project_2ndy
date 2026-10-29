@@ -26,22 +26,80 @@ class AssistantQueryRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "qwen/qwen3.8-27b"
+
+
+def get_active_ai_key() -> tuple[Optional[str], str]:
+    """Retrieve active LLM key and identify provider."""
+    # Check Groq key first
+    key = getattr(settings, "GROQ_API_KEY", None) or settings.GEMINI_API_KEY
+    if key and key.startswith("gsk_"):
+        return key, "groq"
+    if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("gsk_"):
+        return settings.GEMINI_API_KEY, "gemini"
+    return key, "groq" if (key and key.startswith("gsk_")) else "none"
+
+
 @router.get("/status")
 async def get_assistant_status():
-    """Verify Gemini API key connectivity and return operational health."""
-    key = settings.GEMINI_API_KEY
+    """Verify AI API key connectivity and return operational health."""
+    key, provider = get_active_ai_key()
     if not key:
         return create_response(
             data={
-                "provider": "Google Gemini",
+                "provider": "Groq / Gemini AI",
                 "is_configured": False,
                 "status": "NOT CONFIGURED",
-                "message": "GEMINI_API_KEY is not set in environment or .env file. The assistant uses the offline data-grounded factual engine.",
+                "message": "AI API key is not configured. The assistant uses the offline data-grounded factual engine.",
                 "active_engine": "DETERMINISTIC_GROUNDED_FACTS",
             },
             provenance="REFERENCE",
         )
 
+    if provider == "groq" or key.startswith("gsk_"):
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {key}"}
+                )
+                if resp.status_code == 200:
+                    return create_response(
+                        data={
+                            "provider": "Groq LPU (Ultra-Fast Inference)",
+                            "is_configured": True,
+                            "status": "CONNECTED",
+                            "model": GROQ_MODEL,
+                            "message": "Groq API key is active. Assistant queries are powered by Qwen 27B on Groq LPUs.",
+                            "active_engine": "GROQ_LLM_SYNTHESIS",
+                        },
+                        provenance="REFERENCE",
+                    )
+                else:
+                    return create_response(
+                        data={
+                            "provider": "Groq LPU",
+                            "is_configured": True,
+                            "status": f"HTTP_{resp.status_code}",
+                            "message": f"Groq API returned HTTP status {resp.status_code}.",
+                            "active_engine": "DETERMINISTIC_GROUNDED_FACTS_FALLBACK",
+                        },
+                        provenance="REFERENCE",
+                    )
+        except Exception as e:
+            return create_response(
+                data={
+                    "provider": "Groq LPU",
+                    "is_configured": True,
+                    "status": "NETWORK_ERROR",
+                    "message": f"Network exception reaching Groq endpoint: {str(e)}",
+                    "active_engine": "DETERMINISTIC_GROUNDED_FACTS_FALLBACK",
+                },
+                provenance="REFERENCE",
+            )
+
+    # Gemini Fallback Check
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.post(
@@ -68,7 +126,7 @@ async def get_assistant_status():
                         "is_configured": True,
                         "status": "PERMISSION_DENIED",
                         "http_code": 403,
-                        "message": "Gemini API key authenticated with Google, but requires an active billing account or a project with free tier quota enabled at https://aistudio.google.com/apikey.",
+                        "message": "Gemini API key requires an active billing account.",
                         "error_detail": err_detail,
                         "active_engine": "DETERMINISTIC_GROUNDED_FACTS_FALLBACK",
                     },
@@ -214,20 +272,64 @@ def query_assistant(
         )
         suggested_actions.append({"label": "Open Command Center", "action": "NAVIGATE", "target": "/command-center"})
 
-    # Construct clean, structured municipal response
-    facts_text = " ".join(evidence_facts)
-    answer = (
-        f"Based on real-time database telemetry and model forecasts for Coimbatore:\n\n"
-        f"{facts_text}\n\n"
-        f"All metrics are traceable to specific canonical identifiers. No causality is asserted between coincident events."
-    )
+    # Construct clean, structured municipal response using Groq LLM synthesis
+    facts_text = "\n".join(f"- {f}" for f in evidence_facts)
+    answer = None
+    ai_engine = "DETERMINISTIC_GROUNDED_FACTS"
+
+    key, provider = get_active_ai_key()
+    if key and (provider == "groq" or key.startswith("gsk_")):
+        try:
+            prompt_system = (
+                "You are UrbanIQ, the intelligent AI assistant for the Coimbatore Municipal Corporation (CMC) Digital Twin in Tamil Nadu, India.\n"
+                "Your objective is to provide executive, clear, well-structured, data-grounded guidance to city commissioners, urban planners, and engineers.\n\n"
+                "VERIFIED COIMBATORE RUNTIME DATABASE TELEMETRY & OBSERVATIONS:\n"
+                f"{facts_text}\n\n"
+                "INSTRUCTIONS:\n"
+                "1. Directly answer the user's question, integrating the verified telemetry above.\n"
+                "2. Structure your response with markdown headings, clear bullet points, and exact numbers.\n"
+                "3. Provide realistic, actionable municipal operational recommendations for Coimbatore.\n"
+                "4. Be objective, professional, and concise."
+            )
+
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json"
+            }
+            body = {
+                "model": GROQ_MODEL,
+                "messages": [
+                    {"role": "system", "content": prompt_system},
+                    {"role": "user", "content": req.question}
+                ],
+                "max_tokens": 650,
+                "temperature": 0.3
+            }
+            with httpx.Client(timeout=14.0) as client:
+                resp = client.post(GROQ_API_URL, headers=headers, json=body)
+                if resp.status_code == 200:
+                    res_json = resp.json()
+                    choices = res_json.get("choices", [])
+                    if choices and choices[0].get("message", {}).get("content"):
+                        answer = choices[0]["message"]["content"]
+                        ai_engine = f"GROQ_LPU_{GROQ_MODEL}"
+        except Exception as e:
+            print(f"[Assistant] Groq LLM call exception: {e}")
+
+    if not answer:
+        answer = (
+            f"Based on real-time database telemetry and model forecasts for Coimbatore:\n\n"
+            f"{facts_text}\n\n"
+            f"All metrics are traceable to specific canonical identifiers. No causality is asserted between coincident events."
+        )
 
     evidence = {
         "tools_called": list(set(tools_called)),
         "data_sources": list(set(data_sources)),
         "provenance_tags": list(set(provenance_tags)),
         "timestamps": timestamps,
-        "model_versions": ["xgb-traffic-v1.0", "cpcb-subindex-2014", "stat-census-v1.0"],
+        "ai_engine": ai_engine,
+        "model_versions": [GROQ_MODEL if "GROQ" in ai_engine else "deterministic-rules-v1.0", "cpcb-subindex-2014", "stat-census-v1.0"],
         "limitations": "Traffic and energy data in Demo mode carry SIMULATED tags; weather and air data from Open-Meteo carry MODELLED tags.",
     }
 
