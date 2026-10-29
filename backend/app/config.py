@@ -3,8 +3,13 @@
 Loads configuration from environment variables with strong defaults.
 """
 
+import os
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_DEFAULT_DB = os.path.join(_BASE_DIR, "urbaniq.db").replace("\\", "/")
+_ENV_FILE = os.path.join(_BASE_DIR, ".env")
 
 
 class Settings(BaseSettings):
@@ -30,7 +35,7 @@ class Settings(BaseSettings):
     ]
 
     # Database (PostgreSQL+PostGIS for Docker, SQLite for standalone offline dev)
-    DATABASE_URL: str = "sqlite:///./urbaniq.db"
+    DATABASE_URL: str = f"sqlite:///{_DEFAULT_DB}"
 
     # MQTT Broker
     MQTT_BROKER_HOST: str = "localhost"
@@ -41,7 +46,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     MAPBOX_ACCESS_TOKEN: Optional[str] = None
     CESIUM_ION_ACCESS_TOKEN: Optional[str] = None
-    TOMTOM_API_KEY: Optional[str] = None
+    TOMTOM_API_KEY: Optional[str] = "wJJvPnXUJTG8GRzQLhD6QAYTCMct1Nhq"
     HERE_API_KEY: Optional[str] = None
     OPENAQ_API_KEY: Optional[str] = None
 
@@ -59,7 +64,7 @@ class Settings(BaseSettings):
     IQR_OUTLIER_THRESHOLD: float = 1.5
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore"
     )

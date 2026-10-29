@@ -9,6 +9,8 @@ from app.db.models import (
 )
 from app.security.auth import get_password_hash
 from app.security.roles import ROLE_PERMISSIONS, get_role_permissions
+from app.geo.loader import seed_spatial_network
+from app.ingestion.adapters.population_census import seed_population_data
 
 
 def init_db(db: Session = None) -> None:
@@ -110,6 +112,12 @@ def init_db(db: Session = None) -> None:
                 )
                 db.add(cap)
         db.commit()
+
+        # 5. Seed Coimbatore Spatial Network (Zones, Wards, Junctions, Roads, Stations)
+        seed_spatial_network(db)
+
+        # 6. Seed Verified Census & Real-Time Open-Source Population Series
+        seed_population_data(db)
 
     finally:
         if close_db:
