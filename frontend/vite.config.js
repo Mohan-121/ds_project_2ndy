@@ -15,10 +15,15 @@ export default defineConfig({
         target: 'ws://127.0.0.1:8000',
         ws: true,
         changeOrigin: true,
-      }
-    }
+        configure: (proxy) => {
+          proxy.on('error', (_err, _req, _res) => {
+            // Prevent uncaught proxy socket errors from stopping the Vite dev server
+          })
+        },
+      },
+    },
   },
   define: {
-    'CESIUM_BASE_URL': JSON.stringify('/cesium')
-  }
+    'CESIUM_BASE_URL': JSON.stringify('/cesium'),
+  },
 })
